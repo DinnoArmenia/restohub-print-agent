@@ -38,13 +38,19 @@ export function rasterPrintHtml(imageDataUrl: string): string {
  * away the desktop-sized canvas as well as the controls.
  */
 export const PREPARE_RECEIPT_SCRIPT = `(() => {
-  document.querySelectorAll('button,input,select,textarea,[role="button"],[data-no-print],.no-print,.print-actions,.actions').forEach((node) => node.remove());
-  const root = document.querySelector('[data-print-root],.receipt,.print-receipt,.chit,.bill,.ticket,main,article') || document.body;
+  document.querySelectorAll('button,input,select,textarea,[role="button"],[data-no-print],.no-print,.print-actions,.actions,.bar').forEach((node) => node.remove());
+  const root = document.querySelector('[data-print-root],.paper,.receipt,.print-receipt,.chit,.bill,.ticket,main,article') || document.body;
   document.documentElement.style.cssText += ';margin:0!important;padding:0!important;background:#fff!important;overflow:hidden!important';
   document.body.style.cssText += ';margin:0!important;padding:0!important;background:#fff!important;overflow:hidden!important';
-  root.style.cssText += ';margin:0!important;max-width:none!important;box-sizing:border-box!important';
+  root.style.cssText += ';margin:0!important;box-shadow:none!important;border-radius:0!important;box-sizing:border-box!important';
   const rect = root.getBoundingClientRect();
   const width = Math.max(1, Math.ceil(Math.max(rect.width, root.scrollWidth)));
   const height = Math.max(1, Math.ceil(Math.max(rect.height, root.scrollHeight)));
   return { x: Math.max(0, Math.floor(rect.left)), y: Math.max(0, Math.floor(rect.top)), width: Math.min(width, 1200), height: Math.min(height, 10000) };
 })()`;
+
+/** Electron custom page sizes are microns. Preserve the bitmap aspect ratio. */
+export function rasterPageHeightMicrons(widthPx: number, heightPx: number): number {
+  if (!Number.isFinite(widthPx) || widthPx <= 0 || !Number.isFinite(heightPx) || heightPx <= 0) throw new Error('Invalid receipt dimensions');
+  return Math.max(1000, Math.ceil((heightPx / widthPx) * 80000));
+}

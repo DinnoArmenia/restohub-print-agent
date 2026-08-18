@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, powerSaveBlocker,
 import fs from 'node:fs';
 import path from 'node:path';
 import log from 'electron-log/main';
-import { AgentConfig, DEFAULT_CONFIG, documentUrl, normalizeConfig, PREPARE_RECEIPT_SCRIPT, PrinterRoute, rasterPrintHtml } from './core';
+import { AgentConfig, DEFAULT_CONFIG, documentUrl, normalizeConfig, PREPARE_RECEIPT_SCRIPT, PrinterRoute, rasterPageHeightMicrons, rasterPrintHtml } from './core';
 
 type Job = { jobId: string; doc: string; title: string; query: string };
 const busy = new Set<string>();
@@ -36,7 +36,8 @@ async function print(route: PrinterRoute, job: Job) {
     const image = await within(render.webContents.capturePage(bounds), 10000, 'receipt raster timeout');
     spool = new BrowserWindow({ show: false, width: 640, height: Math.max(300, image.getSize().height), useContentSize: true, webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false } });
     await within(spool.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(rasterPrintHtml(image.toPNG().toString('base64').replace(/^/, 'data:image/png;base64,')))), 15000, 'raster document load timeout');
-    await within(new Promise<void>((resolve, reject) => spool!.webContents.print({ silent: true, printBackground: true, deviceName: route.deviceName, margins: { marginType: 'none' }, pageSize: { width: 80000, height: Math.max(1000, Math.ceil(image.getSize().height * 125)) } }, (ok, reason) => ok ? resolve() : reject(new Error(reason || 'Windows rejected print job')))), 30000, 'Windows print timeout');
+    const bitmap = image.getSize();
+    await within(new Promise<void>((resolve, reject) => spool!.webContents.print({ silent: true, printBackground: true, deviceName: route.deviceName, margins: { marginType: 'none' }, pageSize: { width: 80000, height: rasterPageHeightMicrons(bitmap.width, bitmap.height) } }, (ok, reason) => ok ? resolve() : reject(new Error(reason || 'Windows rejected print job')))), 30000, 'Windows print timeout');
   } finally {
     if (spool && !spool.isDestroyed()) spool.destroy();
     if (!render.isDestroyed()) render.destroy();
