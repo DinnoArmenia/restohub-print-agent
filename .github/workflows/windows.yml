@@ -1,0 +1,19 @@
+name: Windows installer
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with: {name: restohub-print-agent-windows, path: release/*.exe}
