@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { documentUrl, normalizeConfig, rasterPrintHtml } from '../src/core';
+import { documentUrl, normalizeConfig, PREPARE_RECEIPT_SCRIPT, rasterPrintHtml } from '../src/core';
 describe('configuration', () => {
   it('requires HTTPS except local development', () => { expect(() => normalizeConfig({ baseUrl: 'http://evil.test' })).toThrow('HTTPS'); expect(normalizeConfig({ baseUrl: 'http://localhost:3000' }).baseUrl).toBe('http://localhost:3000'); });
   it('normalizes and deduplicates printer keys', () => { const c=normalizeConfig({baseUrl:'https://restohub.am/x',printers:[{name:' Kitchen ',key:' CHAYN ',deviceName:'POS',enabled:true},{name:'Copy',key:'chayn',deviceName:'X',enabled:true}],pollMs:50}); expect(c.printers).toHaveLength(1); expect(c.printers[0].key).toBe('chayn'); expect(c.pollMs).toBe(1000); });
@@ -15,5 +15,13 @@ describe('rasterPrintHtml', () => {
 
   it('rejects non-PNG input', () => {
     expect(() => rasterPrintHtml('https://example.com/receipt.png')).toThrow('Invalid raster');
+  });
+});
+
+describe('receipt capture', () => {
+  it('strips interactive controls and identifies a printable root', () => {
+    expect(PREPARE_RECEIPT_SCRIPT).toContain("querySelectorAll('button,input,select,textarea");
+    expect(PREPARE_RECEIPT_SCRIPT).toContain('[data-print-root]');
+    expect(PREPARE_RECEIPT_SCRIPT).toContain('getBoundingClientRect');
   });
 });
