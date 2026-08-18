@@ -9,6 +9,9 @@ const busy = new Set<string>();
 const state = new Map<string, { online: boolean; last?: string; error?: string }>();
 let config: AgentConfig = DEFAULT_CONFIG, setup: BrowserWindow | null = null, tray: Tray | null = null, timer: NodeJS.Timeout | null = null, quitting = false;
 const configPath = () => path.join(app.getPath('userData'), 'config.json');
+function within<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(message)), ms))]);
+}
 function loadConfig() { try { config = normalizeConfig(JSON.parse(fs.readFileSync(configPath(), 'utf8'))); } catch { config = DEFAULT_CONFIG; } }
 function saveConfig(v: unknown) { config = normalizeConfig(v as AgentConfig); fs.mkdirSync(path.dirname(configPath()), { recursive: true }); fs.writeFileSync(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 }); schedule(); return config; }
 async function call(route: PrinterRoute, url: string, init?: RequestInit) {
@@ -21,17 +24,19 @@ async function ack(route: PrinterRoute, jobId: string, ok: boolean, error = '') 
 async function print(route: PrinterRoute, job: Job) {
   // Render first, then print a PNG. Some POS80 Windows drivers corrupt
   // Chromium's vector/EMF spool output but handle raster output correctly.
-  const render = new BrowserWindow({ show: false, width: 640, height: 1200, useContentSize: true, webPreferences: { sandbox: true, contextIsolation: true } });
+  const render = new BrowserWindow({ show: false, width: 640, height: 1200, useContentSize: true, webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false } });
   let spool: BrowserWindow | null = null;
   try {
     await Promise.race([render.loadURL(documentUrl(config.baseUrl, job)), new Promise((_, reject) => setTimeout(() => reject(new Error('document load timeout')), 20000))]);
-    await render.webContents.executeJavaScript(`document.fonts.ready.then(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))`, true);
+    // requestAnimationFrame is suspended for hidden windows on some Electron/
+    // Windows combinations. Waiting on it deadlocked v0.1.1 after claiming a job.
+    await within(render.webContents.executeJavaScript(`document.fonts.ready`, true), 5000, 'receipt fonts timeout');
     const height = await render.webContents.executeJavaScript(`Math.max(document.documentElement.scrollHeight,document.body.scrollHeight)`, true) as number;
     render.setContentSize(640, Math.max(1, Math.min(Math.ceil(height), 10000)));
-    const image = await render.webContents.capturePage();
-    spool = new BrowserWindow({ show: false, width: 640, height: Math.max(300, image.getSize().height), useContentSize: true, webPreferences: { sandbox: true, contextIsolation: true } });
-    await spool.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(rasterPrintHtml(image.toPNG().toString('base64').replace(/^/, 'data:image/png;base64,'))));
-    await new Promise<void>((resolve, reject) => spool!.webContents.print({ silent: true, printBackground: true, deviceName: route.deviceName, margins: { marginType: 'none' }, pageSize: { width: 80000, height: Math.max(1000, Math.ceil(image.getSize().height * 125)) } }, (ok, reason) => ok ? resolve() : reject(new Error(reason || 'Windows rejected print job'))));
+    const image = await within(render.webContents.capturePage(), 10000, 'receipt raster timeout');
+    spool = new BrowserWindow({ show: false, width: 640, height: Math.max(300, image.getSize().height), useContentSize: true, webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false } });
+    await within(spool.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(rasterPrintHtml(image.toPNG().toString('base64').replace(/^/, 'data:image/png;base64,')))), 15000, 'raster document load timeout');
+    await within(new Promise<void>((resolve, reject) => spool!.webContents.print({ silent: true, printBackground: true, deviceName: route.deviceName, margins: { marginType: 'none' }, pageSize: { width: 80000, height: Math.max(1000, Math.ceil(image.getSize().height * 125)) } }, (ok, reason) => ok ? resolve() : reject(new Error(reason || 'Windows rejected print job')))), 30000, 'Windows print timeout');
   } finally {
     if (spool && !spool.isDestroyed()) spool.destroy();
     if (!render.isDestroyed()) render.destroy();
