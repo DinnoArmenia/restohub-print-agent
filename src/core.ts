@@ -20,3 +20,13 @@ export function documentUrl(baseUrl: string, job: { doc?: string; query?: string
   if (!q.has('lang')) q.set('lang', 'hy');
   return new URL(path + '?' + q.toString(), baseUrl).toString();
 }
+
+export function rasterPrintHtml(imageDataUrl: string): string {
+  const safe = imageDataUrl.startsWith('data:image/png;base64,') ? imageDataUrl : '';
+  if (!safe) throw new Error('Invalid raster receipt image');
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    @page{size:80mm auto;margin:0}
+    html,body{width:80mm;margin:0;padding:0;background:#fff}
+    img{display:block;width:80mm;height:auto;margin:0;padding:0}
+  </style></head><body><img src="${safe}"></body></html>`;
+}

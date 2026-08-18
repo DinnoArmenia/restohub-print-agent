@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import log from 'electron-log/main';
-import { AgentConfig, DEFAULT_CONFIG, documentUrl, normalizeConfig, PrinterRoute } from './core';
+import { AgentConfig, DEFAULT_CONFIG, documentUrl, normalizeConfig, PrinterRoute, rasterPrintHtml } from './core';
 
 type Job = { jobId: string; doc: string; title: string; query: string };
 const busy = new Set<string>();
@@ -19,11 +19,23 @@ async function ack(route: PrinterRoute, jobId: string, ok: boolean, error = '') 
   await call(route, '/v1/print/ack', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: route.key, jobId, ok, error: error.slice(0, 300) }) });
 }
 async function print(route: PrinterRoute, job: Job) {
-  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true } });
+  // Render first, then print a PNG. Some POS80 Windows drivers corrupt
+  // Chromium's vector/EMF spool output but handle raster output correctly.
+  const render = new BrowserWindow({ show: false, width: 640, height: 1200, useContentSize: true, webPreferences: { sandbox: true, contextIsolation: true } });
+  let spool: BrowserWindow | null = null;
   try {
-    await Promise.race([win.loadURL(documentUrl(config.baseUrl, job)), new Promise((_, reject) => setTimeout(() => reject(new Error('document load timeout')), 20000))]);
-    await new Promise<void>((resolve, reject) => win.webContents.print({ silent: true, printBackground: true, deviceName: route.deviceName, margins: { marginType: 'none' } }, (ok, reason) => ok ? resolve() : reject(new Error(reason || 'Windows rejected print job'))));
-  } finally { if (!win.isDestroyed()) win.destroy(); }
+    await Promise.race([render.loadURL(documentUrl(config.baseUrl, job)), new Promise((_, reject) => setTimeout(() => reject(new Error('document load timeout')), 20000))]);
+    await render.webContents.executeJavaScript(`document.fonts.ready.then(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))`, true);
+    const height = await render.webContents.executeJavaScript(`Math.max(document.documentElement.scrollHeight,document.body.scrollHeight)`, true) as number;
+    render.setContentSize(640, Math.max(1, Math.min(Math.ceil(height), 10000)));
+    const image = await render.webContents.capturePage();
+    spool = new BrowserWindow({ show: false, width: 640, height: Math.max(300, image.getSize().height), useContentSize: true, webPreferences: { sandbox: true, contextIsolation: true } });
+    await spool.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(rasterPrintHtml(image.toPNG().toString('base64').replace(/^/, 'data:image/png;base64,'))));
+    await new Promise<void>((resolve, reject) => spool!.webContents.print({ silent: true, printBackground: true, deviceName: route.deviceName, margins: { marginType: 'none' }, pageSize: { width: 80000, height: Math.max(1000, Math.ceil(image.getSize().height * 125)) } }, (ok, reason) => ok ? resolve() : reject(new Error(reason || 'Windows rejected print job'))));
+  } finally {
+    if (spool && !spool.isDestroyed()) spool.destroy();
+    if (!render.isDestroyed()) render.destroy();
+  }
 }
 async function poll(route: PrinterRoute) {
   if (!route.enabled || busy.has(route.key)) return; busy.add(route.key);
