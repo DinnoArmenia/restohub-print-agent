@@ -3,6 +3,21 @@ export type AgentConfig = { baseUrl: string; pollMs: number; printers: PrinterRo
 
 export const DEFAULT_CONFIG: AgentConfig = { baseUrl: 'https://restohub.am', pollMs: 3000, printers: [] };
 
+export type FailureCode = 'printer_offline' | 'out_of_paper' | 'device_not_found' | 'spool_rejected'
+  | 'doc_fetch_failed' | 'doc_render_timeout' | 'print_call_failed' | 'unknown';
+
+export function classifyPrintFailure(raw: unknown): FailureCode {
+  const text = String(raw || '').toLowerCase();
+  if (/paper|tray.*empty|media.*empty/.test(text)) return 'out_of_paper';
+  if (/not found|unknown printer|device.*missing|invalid.*device/.test(text)) return 'device_not_found';
+  if (/offline|not connected|unavailable/.test(text)) return 'printer_offline';
+  if (/document load|fetch|http \d{3}/.test(text)) return 'doc_fetch_failed';
+  if (/render|font|raster|capture.*timeout/.test(text)) return 'doc_render_timeout';
+  if (/rejected|spool|windows.*print/.test(text)) return 'spool_rejected';
+  if (/print|timeout/.test(text)) return 'print_call_failed';
+  return 'unknown';
+}
+
 export function normalizeConfig(raw: Partial<AgentConfig>): AgentConfig {
   const url = new URL(String(raw.baseUrl || DEFAULT_CONFIG.baseUrl));
   if (url.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(url.hostname)) throw new Error('RestoHub URL must use HTTPS');

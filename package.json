@@ -1,6 +1,6 @@
 {
   "name": "restohub-print-agent",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Reliable background printing for RestoHub venues",
   "main": "dist/main.js",
   "author": "Dinno Armenia",
