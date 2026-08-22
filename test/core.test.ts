@@ -29,6 +29,12 @@ describe('print diagnostics', () => {
     expect(html).not.toContain('Reprint');
   });
 
+  it('ships executable dashboard JavaScript so navigation can initialize', () => {
+    const script = dashboardHtml().match(/<script>([\s\S]*)<\/script>/)?.[1];
+    expect(script).toBeTruthy();
+    expect(() => new Function(script!)).not.toThrow();
+  });
+
   it('persists one local row per attempt and keeps secrets out of the record', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rh-agent-'));
     const file = path.join(dir, 'activity.db');
