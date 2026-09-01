@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyPrintFailure, documentUrl, normalizeConfig, PREPARE_RECEIPT_SCRIPT, rasterPageHeightMicrons, rasterPrintHtml } from '../src/core';
+import { classifyPrintFailure, documentUrl, managedWorkerState, normalizeConfig, parseRuntimeOptions, PREPARE_RECEIPT_SCRIPT, rasterPageHeightMicrons, rasterPrintHtml } from '../src/core';
 import { ActivityStore } from '../src/history';
 import { dashboardHtml } from '../src/dashboard';
 import fs from 'node:fs';
@@ -9,6 +9,22 @@ describe('configuration', () => {
   it('requires HTTPS except local development', () => { expect(() => normalizeConfig({ baseUrl: 'http://evil.test' })).toThrow('HTTPS'); expect(normalizeConfig({ baseUrl: 'http://localhost:3000' }).baseUrl).toBe('http://localhost:3000'); });
   it('normalizes and deduplicates printer keys', () => { const c=normalizeConfig({baseUrl:'https://restohub.am/x',printers:[{name:' Kitchen ',key:' CHAYN ',deviceName:'POS',enabled:true},{name:'Copy',key:'chayn',deviceName:'X',enabled:true}],pollMs:50}); expect(c.printers).toHaveLength(1); expect(c.printers[0].key).toBe('chayn'); expect(c.pollMs).toBe(1000); });
   it('builds only supported document URLs', () => { expect(documentUrl('https://restohub.am',{doc:'bill',query:'venue=1'})).toContain('/print/bill?'); expect(documentUrl('https://restohub.am',{doc:'unknown',query:'order=1'})).toContain('/print/chit?'); });
+  it('requires an explicit shared data directory in managed mode', () => {
+    expect(parseRuntimeOptions([])).toEqual({ managed: false, dataDir: null, parentPid: null });
+    expect(parseRuntimeOptions(['--managed-worker', '--data-dir=C:\\ProgramData\\RestoHub', '--parent-pid', '123'])).toEqual({ managed: true, dataDir: 'C:\\ProgramData\\RestoHub', parentPid: 123 });
+    expect(() => parseRuntimeOptions(['--managed-worker'])).toThrow('requires --data-dir');
+    expect(() => parseRuntimeOptions(['--parent-pid=0'])).toThrow('positive process id');
+  });
+
+  it('publishes managed status without printer credentials', () => {
+    const config = normalizeConfig({ baseUrl: 'https://restohub.am', printers: [
+      { name: 'Kitchen', key: 'kitchen-secret', deviceName: 'POS80', enabled: true },
+    ] });
+    const state = managedWorkerState(config, new Map([['kitchen-secret', { online: true, last: 'Table 4' }]]),
+      [{ name: 'POS80', displayName: 'Thermal printer' }], '1.0.0', 'TILL-1', new Date('2026-09-01T12:00:00Z'));
+    expect(state.routes[0]).toMatchObject({ name: 'Kitchen', deviceName: 'POS80', online: true, last: 'Table 4' });
+    expect(JSON.stringify(state)).not.toContain('kitchen-secret');
+  });
 });
 
 describe('print diagnostics', () => {

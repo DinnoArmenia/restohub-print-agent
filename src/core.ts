@@ -1,6 +1,29 @@
 export type PrinterRoute = { name: string; key: string; deviceName: string; enabled: boolean };
 export type AgentConfig = { baseUrl: string; pollMs: number; printers: PrinterRoute[] };
 
+export type RuntimeOptions = { managed: boolean; dataDir: string | null; parentPid: number | null };
+
+/**
+ * The combined RestoHub Local Agent starts this executable as an invisible worker and gives it a
+ * machine-wide data directory. The old standalone mode remains available while the pilot is being
+ * replaced, but it must not accidentally become managed merely because an unrelated argument happens
+ * to contain the same words.
+ */
+export function parseRuntimeOptions(args: string[]): RuntimeOptions {
+  const managed = args.some((arg) => arg === '--managed-worker');
+  const inline = args.find((arg) => arg.startsWith('--data-dir='));
+  const index = args.indexOf('--data-dir');
+  const dataDir = inline ? inline.slice('--data-dir='.length) : index >= 0 ? args[index + 1] : null;
+  const parentInline = args.find((arg) => arg.startsWith('--parent-pid='));
+  const parentIndex = args.indexOf('--parent-pid');
+  const parentRaw = parentInline ? parentInline.slice('--parent-pid='.length) : parentIndex >= 0 ? args[parentIndex + 1] : null;
+  const parentPid = parentRaw == null ? null : Number(parentRaw);
+  if ((inline || index >= 0) && !String(dataDir || '').trim()) throw new Error('--data-dir requires a path');
+  if (managed && !String(dataDir || '').trim()) throw new Error('--managed-worker requires --data-dir');
+  if (parentRaw != null && (!Number.isSafeInteger(parentPid) || Number(parentPid) <= 0)) throw new Error('--parent-pid requires a positive process id');
+  return { managed, dataDir: dataDir ? String(dataDir).trim() : null, parentPid };
+}
+
 export const DEFAULT_CONFIG: AgentConfig = { baseUrl: 'https://restohub.am', pollMs: 3000, printers: [] };
 
 export type FailureCode = 'printer_offline' | 'out_of_paper' | 'device_not_found' | 'spool_rejected'
@@ -27,6 +50,49 @@ export function normalizeConfig(raw: Partial<AgentConfig>): AgentConfig {
     deviceName: String(p?.deviceName || '').trim(), enabled: p?.enabled !== false,
   })).filter((p) => p.name && p.key && p.deviceName && !seen.has(p.key) && !!seen.add(p.key));
   return { baseUrl: url.origin, pollMs: Math.min(Math.max(Number(raw.pollMs) || 3000, 1000), 30000), printers };
+}
+
+export type ManagedPrinterState = {
+  name: string; deviceName: string; enabled: boolean; online: boolean; busy: boolean;
+  last: string; lastAt: string; error: string; serverState: string;
+};
+
+export type ManagedWorkerState = {
+  schemaVersion: 1; workerRunning: true; version: string; host: string; updatedAt: string;
+  printers: { name: string; displayName: string }[]; routes: ManagedPrinterState[];
+};
+
+/** Public status deliberately excludes printer keys: they are unattended-client credentials. */
+export function managedWorkerState(
+  config: AgentConfig,
+  routeState: Map<string, Partial<Omit<ManagedPrinterState, 'name' | 'deviceName' | 'enabled'>>>,
+  printers: { name: string; displayName?: string }[],
+  version: string,
+  host: string,
+  now = new Date(),
+): ManagedWorkerState {
+  return {
+    schemaVersion: 1,
+    workerRunning: true,
+    version,
+    host,
+    updatedAt: now.toISOString(),
+    printers: printers.map((p) => ({ name: String(p.name), displayName: String(p.displayName || p.name) })),
+    routes: config.printers.map((route) => {
+      const state = routeState.get(route.key) || {};
+      return {
+        name: route.name,
+        deviceName: route.deviceName,
+        enabled: route.enabled,
+        online: state.online === true,
+        busy: state.busy === true,
+        last: String(state.last || ''),
+        lastAt: String(state.lastAt || ''),
+        error: String(state.error || ''),
+        serverState: String(state.serverState || ''),
+      };
+    }),
+  };
 }
 
 export function documentUrl(baseUrl: string, job: { doc?: string; query?: string }): string {
