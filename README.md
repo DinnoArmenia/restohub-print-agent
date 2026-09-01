@@ -1,11 +1,32 @@
-# RestoHub Print Agent
+# RestoHub Print Worker
 
 Background Windows printing for RestoHub kitchen, bar and bill printers. The agent uses Electron's silent native print API, so Armenian text is rendered by Chromium and sent through the selected Windows printer driver without a visible browser or print dialog.
 
+The customer-facing product is **RestoHub Local Agent**. This repository contains its isolated printing
+worker. The fiscal Windows service supervises the worker and owns the unified tray, setup and support UI;
+the worker stays in the signed-in Windows session because that is where Windows printer drivers are
+available. A printer crash therefore cannot stop fiscal receipts, and an HDM failure cannot stop kitchen
+printing.
+
+## Managed mode
+
+The combined installer starts the unpacked worker with:
+
+```powershell
+"RestoHub Print Worker.exe" --managed-worker --data-dir "C:\ProgramData\HdmBridge\printing"
+```
+
+Managed mode has no tray icon or configuration window. It reads `config.json` from the shared directory
+and publishes a credential-free `status.json` containing detected Windows printers and per-route health.
+The RestoHub Local Agent UI owns those files. Changes to `config.json` are picked up without restarting the
+worker.
+
+The legacy standalone UI remains available during the pilot, but it is not the intended customer install.
+
 ## Install
 
-1. Install the generated `RestoHub-Print-Agent-Setup-*.exe` as Administrator.
-2. Open **RestoHub Print Agent** from Start Menu.
+1. Install the generated standalone worker setup as Administrator.
+2. Open **RestoHub Print Worker** from Start Menu.
 3. Add a route, paste the printer key from RestoHub, and select its Windows printer.
 4. Save and use **Test** in RestoHub Back Office.
 

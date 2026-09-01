@@ -1,7 +1,7 @@
 {
   "name": "restohub-print-agent",
-  "version": "0.2.1",
-  "description": "Reliable background printing for RestoHub venues",
+  "version": "0.3.0-preview.1",
+  "description": "Managed printing worker for RestoHub Local Agent",
   "main": "dist/main.js",
   "author": "Dinno Armenia",
   "license": "UNLICENSED",
@@ -10,7 +10,8 @@
     "build": "tsc",
     "test": "vitest run",
     "dev": "npm run build && electron .",
-    "dist:win": "npm run test && npm run typecheck && npm run build && electron-builder --win nsis --publish never"
+    "dist:win": "npm run test && npm run typecheck && npm run build && electron-builder --win nsis dir --publish never",
+    "pack:win": "npm run test && npm run typecheck && npm run build && electron-builder --win dir --publish never"
   },
   "dependencies": { "electron-log": "^5.4.3" },
   "devDependencies": {
@@ -22,11 +23,11 @@
   },
   "build": {
     "appId": "am.dinno.restohub.printagent",
-    "productName": "RestoHub Print Agent",
+    "productName": "RestoHub Print Worker",
     "asar": true,
     "files": ["dist/**/*", "package.json"],
     "directories": { "output": "release" },
-    "win": { "target": ["nsis"], "artifactName": "RestoHub-Print-Agent-Setup-${version}.${ext}" },
+    "win": { "target": ["nsis"], "artifactName": "RestoHub-Print-Worker-Setup-${version}.${ext}" },
     "nsis": {
       "oneClick": false,
       "perMachine": true,
