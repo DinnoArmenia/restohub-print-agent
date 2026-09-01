@@ -1,5 +1,9 @@
 # RestoHub Print Worker
 
+> **Archived:** this component now lives at
+> [`DinnoArmenia/RestoHubLocalAgent/src/RestoHub.PrintWorker`](https://github.com/DinnoArmenia/RestoHubLocalAgent/tree/master/src/RestoHub.PrintWorker).
+> All new development, versioning and Windows releases happen in the unified repository.
+
 Background Windows printing for RestoHub kitchen, bar and bill printers. The agent uses Electron's silent native print API, so Armenian text is rendered by Chromium and sent through the selected Windows printer driver without a visible browser or print dialog.
 
 The customer-facing product is **RestoHub Local Agent**. This repository contains its isolated printing
