@@ -13,10 +13,12 @@
     "dist:win": "npm run test && npm run typecheck && npm run build && electron-builder --win nsis dir --publish never",
     "pack:win": "npm run test && npm run typecheck && npm run build && electron-builder --win dir --publish never"
   },
-  "dependencies": { "electron-log": "^5.4.3" },
+  "dependencies": {
+    "electron-log": "^5.4.3"
+  },
   "devDependencies": {
     "@types/node": "^22.15.0",
-    "electron": "^37.2.0",
+    "electron": "^44.1.0",
     "electron-builder": "^26.0.12",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
@@ -25,9 +27,19 @@
     "appId": "am.dinno.restohub.printagent",
     "productName": "RestoHub Print Worker",
     "asar": true,
-    "files": ["dist/**/*", "package.json"],
-    "directories": { "output": "release" },
-    "win": { "target": ["nsis"], "artifactName": "RestoHub-Print-Worker-Setup-${version}.${ext}" },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "RestoHub-Print-Worker-Setup-${version}.${ext}"
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": true,
